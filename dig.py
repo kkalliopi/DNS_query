@@ -106,6 +106,7 @@ class DNSResponse:
         self.queries = []
         for query in range(0, self.header.num_questions):
             self.queries.append(DNSQuery(buf))
+        self.answers = []    
         for answer in range(0, self.header.num_answers):
             self.answers.append(DNSRecord(buf))
         self.authorities = []
