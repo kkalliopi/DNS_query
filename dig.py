@@ -35,7 +35,8 @@ class DNSHeader:
     def __init__(self,buf):
 
         self.buf = buf
-        self.id, self.flags, self.num_questions, self.num_answers, self.num_auth, self.num_additionals = unpack('>HHHHHH', buf.read(12))
+        self.id, self.flags, self.num_questions, self.num_answer, self.num_auth, self.num_additionals = unpack('>HHHHHH', buf.read(12))
+        self.num_answers = 1
 
 TYPES = { 1:"A", 2: "NS", 5: "CNAME"}
 
@@ -47,8 +48,8 @@ class DNSRecord:
       self.buf = buf
       self.name = read_domain_name(buf)
       self.type, self.cls, self.ttl, self.rdlength = unpack('>HHHH', buf.read(8))
-      self.rdata = read_rdata(buf,self.rdlength)
-      self.repr = to_s()
+      self.rdata(buf,self.rdlength)
+      self.to_s()
 
   def read_rdata(self, buf, length):
      self.type = type_name
@@ -62,8 +63,9 @@ class DNSRecord:
              rdata_0 = buf.read(length)
              return(rdata_0)
 
-  def to_s():
-     return(f"{self.name}\t\t{self.ttl}\t{type_name}\t{self.rdata}")
+  def to_s(self):
+      print(f"{self.name}\t\t{self.ttl}\t{self.type}\t{self.rdata}")
+      return
 
 def read_domain_name(buf):
 
@@ -88,13 +90,17 @@ def read_domain_name(buf):
       result = '.'.join(map(str, domain))
       return result
 
+
+
 class DNSQuery:
 
   def __init__(self,buf):
 
+
       self.buf = buf
       self.domain = read_domain_name(buf)
       self.type, self.cls = unpack('>HH', buf.read(4))
+
 
 class DNSResponse:
 
@@ -106,7 +112,7 @@ class DNSResponse:
         self.queries = []
         for query in range(0, self.header.num_questions):
             self.queries.append(DNSQuery(buf))
-        self.answers = []    
+        self.answers = []
         for answer in range(0, self.header.num_answers):
             self.answers.append(DNSRecord(buf))
         self.authorities = []
@@ -126,7 +132,8 @@ def main():
     receivedBytes, address = UDPsocket.recvfrom(1024)
     print(len(receivedBytes))
     response  = DNSResponse(receivedBytes)
+
     for answer in response.answers:
-        print(answer, end =" ")
+        print(answer.to_s())
 
 main()
