@@ -1,5 +1,5 @@
 import socket
-from struct import pack, unpack
+from struct import pack, unpack, calcsize
 import random
 from io import BytesIO
 import sys
@@ -7,26 +7,24 @@ import sys
 def make_question_header(query_id):
 
   header = pack('>HHHHHH',query_id, 0x0100, 0x0001, 0x0000, 0x0000, 0x0000)
+
   return header
 
 def encode_domain_name(domain):
 
-  elements_of_domain = domain.split(".")
-  lenght_of_elements = list(map(len,elements_of_domain))
-  merged_list = [element for pair in zip(lenght_of_elements, elements_of_domain + [0])
-                            for element in pair]
+  translated_name =''.join(map(lambda x: chr(len(x)) + x, domain.split('.'))) + '\0'
+  bytes_s = translated_name.encode("utf-8")
+  return bytes_s
 
-  x = "".join(map(str, merged_list))
-  translated_name = " ".join(x) + "\0"
-  return translated_name
+
 
 def make_dns_query(domain, type):
 
   query_id = random.randint(0,65535)
   header = make_question_header(query_id)
   question =  encode_domain_name(domain)
-  list = [ord(char) for char in question]
-  encoded_question = pack(">{}HHH".format(len(list)), *list, type, 1)
+
+  encoded_question = question + pack(">HH", type, 1)
 
   return header + encoded_question
 
@@ -35,8 +33,7 @@ class DNSHeader:
     def __init__(self,buf):
 
         self.buf = buf
-        self.id, self.flags, self.num_questions, self.num_answer, self.num_auth, self.num_additionals = unpack('>HHHHHH', buf.read(12))
-        self.num_answers = 1
+        self.id, self.flags, self.num_questions, self.num_answers, self.num_auth, self.num_additionals = unpack('>HHHHHH', buf.read(12))
 
 TYPES = { 1:"A", 2: "NS", 5: "CNAME"}
 
@@ -48,23 +45,25 @@ class DNSRecord:
       self.buf = buf
       self.name = read_domain_name(buf)
       self.type, self.cls, self.ttl, self.rdlength = unpack('>HHHH', buf.read(8))
-      self.rdata(buf,self.rdlength)
+      self.read_rdata(buf,self.rdlength)
       self.to_s()
 
   def read_rdata(self, buf, length):
-     self.type = type_name
-     for type_name in TYPES:
-         if TYPES[type_name] == "CNAME" or TYPES[type_name] == "NS":
+
+     for self.type in TYPES:
+         if TYPES[self.type] == "CNAME" or TYPES[self.type] == "NS":
              return(read_domain_name(buf))
-         elif TYPES[type_name] == "A":
-             rdata_a = unpack('C*',buf.read(length)).join('.')
-             return(rdata_a)
+         elif TYPES[self.type] == "A":
+             s = unpack(">B", buf.read(length))[-4:]
+             x = '.'.join(map(str, s))
+             return x
+
          else:
              rdata_0 = buf.read(length)
              return(rdata_0)
 
   def to_s(self):
-      print(f"{self.name}\t\t{self.ttl}\t{self.type}\t{self.rdata}")
+      print(f"{self.name}\t\t{self.ttl}\t{self.type}\t{self.read_rdata(self.buf,self.rdlength)}")
       return
 
 def read_domain_name(buf):
@@ -87,9 +86,9 @@ def read_domain_name(buf):
           else:
              domain.append(len)
 
-      result = '.'.join(map(str, domain))
-      return result
+      result = ''.join(map(chr, domain))
 
+      return result
 
 
 class DNSQuery:
@@ -130,7 +129,6 @@ def main():
     domain = sys.argv[1]
     UDPsocket.send(make_dns_query(domain, 1), 0)
     receivedBytes, address = UDPsocket.recvfrom(1024)
-    print(len(receivedBytes))
     response  = DNSResponse(receivedBytes)
 
     for answer in response.answers:
