@@ -6,20 +6,18 @@ import sys
 
 
 def make_question_header(query_id):
-
-  header = pack('>HHHHHH',query_id, 0x0100, 0x0001, 0x0000, 0x0000, 0x0000)
+  header = pack('>HHHHHH', query_id, 0x0100, 0x0001, 0x0000, 0x0000, 0x0000)
 
   return header
 
 def encode_domain_name(domain):
-
   translated_name =''.join(map(lambda x: chr(len(x)) + x, domain.split('.'))) + '\0'
-  bytes_s = translated_name.encode("utf-8")
+
+  bytes_s = translated_name.encode("ascii")
   return bytes_s
 
 
 def make_dns_query(domain, type):
-
   query_id = random.randint(0,65535)
   header = make_question_header(query_id)
   question =  encode_domain_name(domain)
@@ -70,29 +68,39 @@ class DNSRecord:
 
 
 def read_domain_name(buf):
-
       domain = []
+
       while True:
           byte = buf.read(1)
-          length = unpack('B', byte)[0]
-          if length == 0:
+          int_char = unpack('B', byte)[0]
+
+          if int_char == 0:
               break
-          elif length & 0b11000000 == 0b11000000:
+          elif int_char & 0b11000000 == 0b11000000:
+
               second_byte = buf.read(1)
               second_byte_unpacked = unpack('B', second_byte)[0]
-              offset = ((length & 0x3f) << 8) + second_byte_unpacked
+              offset = ((int_char & 0x3f) << 8) + second_byte_unpacked
               old_pos = buf.seek(1)
               buf.seek(offset)
-              string = read_domain_name(buf)
-              for character in string:
-                  domain.append(ord(character))
+              domain.append(read_domain_name(buf))
               buf.seek(old_pos)
               break
           else:
-             domain.append(length)
+             domain.append(int_char)
 
-      result = ''.join(map(chr, domain))
-      return result
+      if all(isinstance(item, int) for item in domain):
+          i = 0
+          list = []
+          while i < len(domain):
+              length = domain[i]
+              list.append(domain[i+1 :i+length+1])
+              i = i+ length + 1
+
+          return ".".join(map(lambda x:''.join(map(chr, x)), list))
+      else:
+           return "".join(domain)
+
 
 
 class DNSQuery:
@@ -135,7 +143,7 @@ def main():
     receivedBytes, address = UDPsocket.recvfrom(1024)
     response  = DNSResponse(receivedBytes)
 
-    
+
     for answer in response.answers:
         print(answer.to_s())
 
